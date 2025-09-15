@@ -88,17 +88,41 @@ const resolvers = {
       }
       return data;
     },
-    ideas: async () => {
-      const Idea = await ideeamodel.find({
-        status: { $in: ["Indevelopment", "Progress", "Complete"] },
-        adminApprove: true
+   ideas: async () => {
+  const ideas = await ideeamodel.find({
+    status: { $in: ["Indevelopment", "Progress", "Complete"] },
+    adminApprove: true,
+  });
+
+  if (!ideas || ideas.length === 0) {
+    return [];
+  }
+  const statusColorMap = {
+  Indevelopment: 'yellow',
+  Progress: 'blue',
+  Complete: 'green',
+};
+
+  const groupedIdeas = {
+    Indevelopment: [],
+    Progress: [],
+    Complete: []
+  };
+
+  ideas.forEach((idea) => {
+        if (groupedIdeas[idea.status]) {
+          groupedIdeas[idea.status].push({
+            ...idea,
+            color: statusColorMap[idea.status],
+          });
+        }
       });
-      if (!Idea) {
-        return `not found idea`
-      }
-      console.log(Idea.length)
-      return Idea;
-    },
+
+        return Object.keys(statusColorMap).map((status) => ({
+        status,
+        color: statusColorMap[status],
+        ideas: groupedIdeas[status],
+      }));
   },
   Mutation: {
     addBlog: async (_, { input }) => {
