@@ -1,3 +1,4 @@
+
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import { GraphQLUpload } from 'graphql-upload';
@@ -191,8 +192,16 @@ const resolvers = {
   },
 };
 
-const server = new ApolloServer({ typeDefs, resolvers });
-await db; // connect to database
+const app = express();
 
-const { url } = await startStandaloneServer(server, { listen: { port: 4000 } });
-console.log(`🚀 Server ready at ${url}`);
+app.use(graphqlUploadExpress({ maxFileSize: 10000000, maxFiles: 1 }));
+
+const server = new ApolloServer({ typeDefs, resolvers });
+await server.start();
+
+app.use('/graphql', express.json(), expressMiddleware(server));
+
+app.listen(4000, () => {
+  console.log(' Server running at http://localhost:4000/graphql');
+});
+
