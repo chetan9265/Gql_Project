@@ -88,37 +88,39 @@ const resolvers = {
       const data = await blogmodel.findById(id);
       return data || { message: "data is not found" };
     },
-    ideas: async () => {
-      const ideas = await ideeamodel.find({
-        status: { $in: ["Indevelopment", "Progress", "Complete"] },
-        adminApprove: true,
-      });
+    ideas: async (_, { status, tag, reaction }) => {
+  const filter = {
+    adminApprove: true,
+  };
 
-      if (!ideas || ideas.length === 0) return [];
+  if (status) {
+    filter.status = status;
+  }
 
-      const statusColorMap = {
-        Indevelopment: 'yellow',
-        Progress: 'blue',
-        Complete: 'green',
-      };
+  if (tag) {
+    filter.tag = tag;  // Assuming your Idea model has a 'tag' field
+  }
 
-      const groupedIdeas = { Indevelopment: [], Progress: [], Complete: [] };
+  if (reaction) {
+    filter.reactions = { $in: [reaction] };
+  }
 
-      ideas.forEach((idea) => {
-        if (groupedIdeas[idea.status]) {
-          groupedIdeas[idea.status].push({
-            ...idea._doc,
-            color: statusColorMap[idea.status],
-          });
-        }
-      });
+  const ideas = await ideeamodel.find(filter);
 
-      return Object.keys(statusColorMap).map((status) => ({
-        status,
-        color: statusColorMap[status],
-        ideas: groupedIdeas[status],
-      }));
-    },
+  if (!ideas || ideas.length === 0) return [];
+
+  const statusColorMap = {
+    Indevelopment: 'yellow',
+    Progress: 'blue',
+    Complete: 'green',
+  };
+
+  return ideas.map((idea) => ({
+    ...idea._doc,
+    color: statusColorMap[idea.status],
+  }));
+},
+
   },
 
   Mutation: {
