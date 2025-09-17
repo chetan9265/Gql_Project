@@ -1,12 +1,16 @@
 
-import { ApolloServer } from '@apollo/server';
-import { startStandaloneServer } from '@apollo/server/standalone';
-import { GraphQLUpload } from 'graphql-upload';
+
+import express from 'express';
+import { ApolloServer } from 'apollo-server-express';
+// import { graphqlUploadExpress } from 'graphql-upload';
 import fs from 'fs';
 import path from 'path';
+import GraphQLUpload  from 'graphql-upload/GraphQLUpload.mjs';
 import blogmodel from "./model/Blog.model.js";
+// import express from "express"
 import ideeamodel from './model/Idea.model.js';
 import reactionmodel from './model/Reaction.model.js';
+import graphqlUploadExpress from "graphql-upload/graphqlUploadExpress.mjs"
 import { db } from './db.js';
 
 const typeDefs = `#graphql
@@ -194,16 +198,26 @@ const resolvers = {
   },
 };
 
-const app = express();
+async function startServer() {
+  const app = express();
 
-app.use(graphqlUploadExpress({ maxFileSize: 10000000, maxFiles: 1 }));
+  // File upload middleware
+  app.use(graphqlUploadExpress({ maxFileSize: 10000000, maxFiles: 1 }));
 
-const server = new ApolloServer({ typeDefs, resolvers });
-await server.start();
+  const apolloServer = new ApolloServer({
+    typeDefs,
+    resolvers,
+  });
 
-app.use('/graphql', express.json(), expressMiddleware(server));
+  await apolloServer.start();
 
-app.listen(4000, () => {
-  console.log(' Server running at http://localhost:4000/graphql');
-});
+  // Apollo integration with Express
+  apolloServer.applyMiddleware({ app, path: '/graphql' });
+
+  app.listen(4000, () => {
+    console.log(`🚀 Server running at http://localhost:4000/graphql`);
+  });
+}
+
+startServer();
 
