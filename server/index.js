@@ -11,7 +11,12 @@ import blogmodel from "./model/Blog.model.js";
 import ideeamodel from './model/Idea.model.js';
 import reactionmodel from './model/Reaction.model.js';
 import graphqlUploadExpress from "graphql-upload/graphqlUploadExpress.mjs"
+import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from "uuid";
+import cors from "cors";
 import { db } from './db.js';
+import cookieParser from "cookie-parser";
+
 
 const typeDefs = `#graphql
   scalar Upload
@@ -73,7 +78,7 @@ const typeDefs = `#graphql
     addIdea(input: AddIdeaInput!): Idea!
     editIdea(id: ID!, input: AddIdeaInput!): Idea!
     deleteIdea(id: ID!): String!
-    ideaVote(id:ID!,userId:ID!): String
+    ideaVote(id:ID!): String
   }
 `;
 
@@ -92,25 +97,24 @@ const resolvers = {
       const data = await blogmodel.findById(id);
       return data || { message: "data is not found" };
     },
-    ideas: async (_, { status, tag, reaction }) => {
+    ideas: async (_, ) => {
   const filter = {
     adminApprove: true,
   };
 
-  if (status) {
-    filter.status = status;
-  }
+  // if (status) {
+  //   filter.status = status;
+  // }
 
-  if (tag) {
-    filter.tag = tag;  // Assuming your Idea model has a 'tag' field
-  }
+  // if (tag) {
+  //   filter.tag = tag;  // Assuming your Idea model has a 'tag' field
+  // }
 
-  if (reaction) {
-    filter.reactions = { $in: [reaction] };
-  }
+  // if (reaction) {
+  //   filter.reactions = { $in: [reaction] };
+  // }
 
   const ideas = await ideeamodel.find(filter);
-
   if (!ideas || ideas.length === 0) return [];
 
   const statusColorMap = {
@@ -118,11 +122,11 @@ const resolvers = {
     Progress: 'blue',
     Complete: 'green',
   };
-
-  return ideas.map((idea) => ({
-    ...idea._doc,
-    color: statusColorMap[idea.status],
-  }));
+  // return ideas.map((idea) => ({
+  //   ...idea._doc,
+  //   color: statusColorMap[idea.status],
+  // }));
+  return ideas
 },
 
   },
@@ -183,23 +187,72 @@ const resolvers = {
       return `Idea with id ${id} deleted successfully`;
     },
 
-    ideaVote: async (_, { id, userId }) => {
-      const idea = await ideeamodel.findOne({ _id: id, userIds: userId });
-      if (idea) return "User has already voted!";
+  ideaVote: async (_, { id }, { req, res }) => {
+  let identifier;
 
-      await ideeamodel.findByIdAndUpdate(
-        id,
-        { $push: { userIds: userId }, $inc: { vote: 1 } },
-        { new: true }
-      );
+  console.log(req.cookies)
+  const anonId = req.cookies?.anonId;
+  
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, chchchchc);
+      console.log(decoded)
+      identifier = decoded.userId;
+    } catch (err) {
+      console.error("Invalid token:", err.message);
+    }
+  }
+  if (!identifier) {
+    if (req.cookies?.anonId) {
+      identifier = req.cookies.anonId;
+    } else {
+      identifier = uuidv4();    
+      var token = jwt.sign({ id:identifier}, "chchchchc");
+     res.cookie("anonId", token, {
+        httpOnly: false,
+        sameSite:  "none",
+        secure: process.env.NODE_ENV === "production",  
+        maxAge: 50 * 50 * 1000,
+        path: "/"
+      });
+        console.log('✅Cookie set attempt - Headers:', res.getHeaders());
+    }
+  }
+  const idea = await ideeamodel.findById(id);
+  if (!idea) return "Idea not found";
 
-      return "Vote added successfully";
-    },
+  const hasVoted = idea.userIds.includes(identifier);
+   console.log(hasVoted)
+  if (hasVoted) {
+    // remove vote
+    await ideeamodel.findByIdAndUpdate(
+      id,
+      { $pull: { userIds: identifier }, $inc: { vote: -1 } },
+      { new: true }
+    );
+    return "Vote removed";
+  } else {
+    // add vote
+    await ideeamodel.findByIdAndUpdate(
+      id,
+      { $push: { userIds: identifier }, $inc: { vote: 1 } },
+      { new: true }
+    );
+    return "Vote added";
+  }
+}
   },
 };
 
 async function startServer() {
   const app = express();
+   app.use(
+    cors({
+      origin: "http://192.168.43.151:3000", // your React app URL
+      credentials: true,               // allow cookies
+    })
+  );
+    app.use(cookieParser());
 
   // File upload middleware
   app.use(graphqlUploadExpress({ maxFileSize: 10000000, maxFiles: 1 }));
@@ -207,12 +260,13 @@ async function startServer() {
   const apolloServer = new ApolloServer({
     typeDefs,
     resolvers,
+    context:({req,res})=>({req,res})
   });
 
   await apolloServer.start();
 
   // Apollo integration with Express
-  apolloServer.applyMiddleware({ app, path: '/graphql' });
+  apolloServer.applyMiddleware({ app, path: '/graphql',cors:false });
 
   app.listen(4000, () => {
     console.log(`🚀 Server running at http://localhost:4000/graphql`);
